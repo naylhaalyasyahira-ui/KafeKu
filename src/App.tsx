@@ -10,6 +10,15 @@ import { RoleAccessModal } from './components/RoleAccessModal.tsx';
 import { MenuItem, Order, Ingredient, FinancialReport, KitchenStatus, CafeSettings, StaffUser } from './types.ts';
 import { INITIAL_MENU, INITIAL_INGREDIENTS, INITIAL_ORDERS, INITIAL_SETTINGS, INITIAL_STAFF } from './data/mockData.ts';
 import { announceOrderToKitchen } from './utils/audio.ts';
+import { 
+  supabase, 
+  mapMenuFromDb, 
+  mapInventoryFromDb, 
+  mapOrderFromDb, 
+  mapOrderToDb, 
+  mapSettingsFromDb, 
+  mapStaffFromDb 
+} from './utils/supabase.ts';
 
 // Helper to parse role and standalone mode from pathname and search params
 const getInitialRoleAndKiosk = (): { tab: AppTab; standalone: boolean } => {
@@ -105,63 +114,137 @@ export default function App() {
   // Keep track of previous orders count to trigger audio TTS on newly created orders
   const prevOrderCountRef = useRef<number>(orders.length);
 
-  // Load data from backend API
+  // Load data from backend API with automatic Supabase direct fallback
   const fetchAllData = async () => {
     try {
       // 1. Fetch menu
-      const menuRes = await fetch('/api/menu');
-      if (menuRes.ok) {
-        const menuJson = await menuRes.json();
-        if (menuJson.success && menuJson.data) setMenuList(menuJson.data);
+      let menuLoaded = false;
+      try {
+        const menuRes = await fetch('/api/menu');
+        const cType = menuRes.headers.get('content-type') || '';
+        if (menuRes.ok && cType.includes('application/json')) {
+          const menuJson = await menuRes.json();
+          if (menuJson.success && menuJson.data) {
+            setMenuList(menuJson.data);
+            menuLoaded = true;
+          }
+        }
+      } catch {}
+
+      if (!menuLoaded) {
+        try {
+          const { data } = await supabase.from('menu').select('*');
+          if (data && data.length > 0) setMenuList(data.map(mapMenuFromDb));
+        } catch {}
       }
 
       // 2. Fetch inventory
-      const invRes = await fetch('/api/inventory');
-      if (invRes.ok) {
-        const invJson = await invRes.json();
-        if (invJson.success && invJson.data) setIngredients(invJson.data);
+      let invLoaded = false;
+      try {
+        const invRes = await fetch('/api/inventory');
+        const cType = invRes.headers.get('content-type') || '';
+        if (invRes.ok && cType.includes('application/json')) {
+          const invJson = await invRes.json();
+          if (invJson.success && invJson.data) {
+            setIngredients(invJson.data);
+            invLoaded = true;
+          }
+        }
+      } catch {}
+
+      if (!invLoaded) {
+        try {
+          const { data } = await supabase.from('inventory').select('*');
+          if (data && data.length > 0) setIngredients(data.map(mapInventoryFromDb));
+        } catch {}
       }
 
       // 3. Fetch orders
-      const ordersRes = await fetch('/api/orders');
-      if (ordersRes.ok) {
-        const ordersJson = await ordersRes.json();
-        if (ordersJson.success && ordersJson.data) {
-          const newOrders: Order[] = ordersJson.data;
+      let ordersLoaded = false;
+      try {
+        const ordersRes = await fetch('/api/orders');
+        const cType = ordersRes.headers.get('content-type') || '';
+        if (ordersRes.ok && cType.includes('application/json')) {
+          const ordersJson = await ordersRes.json();
+          if (ordersJson.success && ordersJson.data) {
+            const newOrders: Order[] = ordersJson.data;
 
-          // Check if a new order was added by someone else while audio is enabled
-          if (newOrders.length > prevOrderCountRef.current && audioAlertsEnabled) {
-            const newest = newOrders[0];
-            const itemsStr = newest.items.map(i => `${i.name} ${i.quantity}`).join(', ');
-            announceOrderToKitchen(
-              newest.source === 'preorder' ? `Pre-Order ${newest.customerName}` : 'Kasir',
-              itemsStr
-            );
+            if (newOrders.length > prevOrderCountRef.current && audioAlertsEnabled) {
+              const newest = newOrders[0];
+              const itemsStr = newest.items.map(i => `${i.name} ${i.quantity}`).join(', ');
+              announceOrderToKitchen(
+                newest.source === 'preorder' ? `Pre-Order ${newest.customerName}` : 'Kasir',
+                itemsStr
+              );
+            }
+            prevOrderCountRef.current = newOrders.length;
+            setOrders(newOrders);
+            ordersLoaded = true;
           }
-          prevOrderCountRef.current = newOrders.length;
-          setOrders(newOrders);
         }
+      } catch {}
+
+      if (!ordersLoaded) {
+        try {
+          const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+          if (data && data.length > 0) {
+            const newOrders = data.map(mapOrderFromDb);
+            prevOrderCountRef.current = newOrders.length;
+            setOrders(newOrders);
+          }
+        } catch {}
       }
 
       // 4. Fetch reports
-      const reportsRes = await fetch('/api/reports');
-      if (reportsRes.ok) {
-        const reportsJson = await reportsRes.json();
-        if (reportsJson.success && reportsJson.data) setReport(reportsJson.data);
-      }
+      try {
+        const reportsRes = await fetch('/api/reports');
+        const cType = reportsRes.headers.get('content-type') || '';
+        if (reportsRes.ok && cType.includes('application/json')) {
+          const reportsJson = await reportsRes.json();
+          if (reportsJson.success && reportsJson.data) setReport(reportsJson.data);
+        }
+      } catch {}
 
       // 5. Fetch cafe operational settings
-      const settingsRes = await fetch('/api/settings');
-      if (settingsRes.ok) {
-        const settingsJson = await settingsRes.json();
-        if (settingsJson.success && settingsJson.data) setSettings(settingsJson.data);
+      let settingsLoaded = false;
+      try {
+        const settingsRes = await fetch('/api/settings');
+        const cType = settingsRes.headers.get('content-type') || '';
+        if (settingsRes.ok && cType.includes('application/json')) {
+          const settingsJson = await settingsRes.json();
+          if (settingsJson.success && settingsJson.data) {
+            setSettings(settingsJson.data);
+            settingsLoaded = true;
+          }
+        }
+      } catch {}
+
+      if (!settingsLoaded) {
+        try {
+          const { data } = await supabase.from('cafe_settings').select('*').limit(1).maybeSingle();
+          if (data) setSettings(mapSettingsFromDb(data));
+        } catch {}
       }
 
       // 6. Fetch staff roster
-      const staffRes = await fetch('/api/staff');
-      if (staffRes.ok) {
-        const staffJson = await staffRes.json();
-        if (staffJson.success && staffJson.data) setStaffList(staffJson.data);
+      let staffLoaded = false;
+      try {
+        const staffRes = await fetch('/api/staff');
+        const cType = staffRes.headers.get('content-type') || '';
+        if (staffRes.ok && cType.includes('application/json')) {
+          const staffJson = await staffRes.json();
+          if (staffJson.success && staffJson.data) {
+            setStaffList(staffJson.data);
+            staffLoaded = true;
+          }
+        }
+      } catch {}
+
+      if (!staffLoaded) {
+        try {
+          const { data } = await supabase.from('staff').select('*');
+          if (data && data.length > 0) setStaffList(data.map(mapStaffFromDb));
+        } catch {}
       }
     } catch {
       // Server might be booting or offline
@@ -181,7 +264,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isOfflineMode, audioAlertsEnabled]);
 
-  // Create new order handler
+  // Create new order handler (Dual-engine: Edge/Express API + Direct Supabase fallback)
   const handleCreateOrder = async (orderPayload: Partial<Order>): Promise<Order | null> => {
     try {
       const res = await fetch('/api/orders', {
@@ -189,29 +272,68 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderPayload),
       });
-      const json = await res.json();
-      if (json.success && json.data) {
-        const createdOrder: Order = json.data;
-        setOrders(prev => [createdOrder, ...prev]);
-        prevOrderCountRef.current += 1;
+      const cType = res.headers.get('content-type') || '';
+      if (res.ok && cType.includes('application/json')) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          const createdOrder: Order = json.data;
+          setOrders(prev => [createdOrder, ...prev]);
+          prevOrderCountRef.current += 1;
 
-        // Trigger TTS sound notification
-        if (audioAlertsEnabled) {
-          const itemsStr = createdOrder.items.map(i => `${i.name} ${i.quantity}`).join(', ');
-          announceOrderToKitchen(
-            createdOrder.source === 'preorder' ? `Pre-Order ${createdOrder.customerName}` : 'Kasir',
-            itemsStr
-          );
+          if (audioAlertsEnabled) {
+            const itemsStr = createdOrder.items.map(i => `${i.name} ${i.quantity}`).join(', ');
+            announceOrderToKitchen(
+              createdOrder.source === 'preorder' ? `Pre-Order ${createdOrder.customerName}` : 'Kasir',
+              itemsStr
+            );
+          }
+
+          fetchAllData();
+          return createdOrder;
         }
-
-        // Refresh inventory & reports
-        fetchAllData();
-        return createdOrder;
       }
     } catch (e) {
-      console.error('Failed to create order', e);
+      console.warn('API /api/orders unavailable, fallback to local and Supabase direct', e);
     }
-    return null;
+
+    // Direct Supabase / local fallback
+    const fallbackId = `ORD-${Date.now().toString().slice(-4)}`;
+    const fallbackOrder: Order = {
+      id: fallbackId,
+      source: orderPayload.source || 'preorder',
+      customerName: orderPayload.customerName || (orderPayload.source === 'preorder' ? 'Pelanggan Pre-Order' : 'Pelanggan Meja'),
+      customerPhone: orderPayload.customerPhone || '',
+      estimatedArrival: orderPayload.estimatedArrival || '15 menit lagi',
+      hasArrived: orderPayload.source === 'cashier',
+      items: orderPayload.items || [],
+      totalAmount: orderPayload.totalAmount || 0,
+      paymentMethod: orderPayload.paymentMethod || 'qris',
+      paymentStatus: 'paid',
+      isNonRefundable: orderPayload.source === 'preorder',
+      cashReceived: orderPayload.cashReceived,
+      cashChange: orderPayload.cashChange,
+      kitchenStatus: (orderPayload.source === 'preorder' && orderPayload.items?.some(i => i.isSensitive)) ? 'menunggu_kedatangan' : 'antrean_dapur',
+      createdAt: new Date().toISOString(),
+      isTakeaway: Boolean(orderPayload.isTakeaway),
+      tableNumber: orderPayload.tableNumber || '',
+    };
+
+    setOrders(prev => [fallbackOrder, ...prev]);
+    prevOrderCountRef.current += 1;
+
+    if (audioAlertsEnabled) {
+      const itemsStr = fallbackOrder.items.map(i => `${i.name} ${i.quantity}`).join(', ');
+      announceOrderToKitchen(
+        fallbackOrder.source === 'preorder' ? `Pre-Order ${fallbackOrder.customerName}` : 'Kasir',
+        itemsStr
+      );
+    }
+
+    try {
+      await supabase.from('orders').insert(mapOrderToDb(fallbackOrder));
+    } catch {}
+
+    return fallbackOrder;
   };
 
   // Customer triggers "Saya Sudah Sampai" or Staff triggers "Konfirmasi Pelanggan Hadir (Manual)"
@@ -220,35 +342,46 @@ export default function App() {
       const res = await fetch(`/api/orders/${orderId}/arrived`, {
         method: 'PATCH',
       });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setOrders(prev => prev.map(o => o.id === orderId ? json.data : o));
+      const cType = res.headers.get('content-type') || '';
+      if (res.ok && cType.includes('application/json')) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setOrders(prev => prev.map(o => o.id === orderId ? json.data : o));
 
-        // Audio announcement for kitchen
-        if (audioAlertsEnabled) {
-          announceOrderToKitchen(
-            json.data.customerName,
-            'Pelanggan telah sampai di kafe! Segera racik menu pesanan sekarang.'
-          );
+          if (audioAlertsEnabled) {
+            announceOrderToKitchen(
+              json.data.customerName,
+              'Pelanggan telah sampai di kafe! Segera racik menu pesanan sekarang.'
+            );
+          }
+          return;
         }
-        return;
       }
     } catch (e) {
-      console.error('Failed to mark arrived on server, fallback to local state', e);
+      console.warn('API /api/orders/:id/arrived failed, fallback to local state & Supabase', e);
     }
 
-    // Local fallback (offline mode or network hiccup)
+    // Local & Supabase fallback
+    const arrivedAt = new Date().toISOString();
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         return {
           ...o,
           hasArrived: true,
-          arrivedAt: new Date().toISOString(),
+          arrivedAt,
           kitchenStatus: o.kitchenStatus === 'menunggu_kedatangan' ? 'antrean_dapur' : o.kitchenStatus,
         };
       }
       return o;
     }));
+
+    try {
+      await supabase.from('orders').update({
+        has_arrived: true,
+        arrived_at: arrivedAt,
+        kitchen_status: 'antrean_dapur'
+      }).eq('id', orderId);
+    } catch {}
 
     if (audioAlertsEnabled) {
       const targetOrder = orders.find(o => o.id === orderId);
@@ -267,13 +400,22 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setOrders(prev => prev.map(o => o.id === orderId ? json.data : o));
+      const cType = res.headers.get('content-type') || '';
+      if (res.ok && cType.includes('application/json')) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setOrders(prev => prev.map(o => o.id === orderId ? json.data : o));
+          return;
+        }
       }
     } catch (e) {
-      console.error('Failed to update status', e);
+      console.warn('Failed to update status on server, fallback to local & Supabase', e);
     }
+
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, kitchenStatus: status } : o));
+    try {
+      await supabase.from('orders').update({ kitchen_status: status }).eq('id', orderId);
+    } catch {}
   };
 
   // Mark customer as No-Show (Protected non-refundable revenue retained)

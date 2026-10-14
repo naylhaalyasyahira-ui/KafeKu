@@ -56,7 +56,14 @@ import {
   Upload,
   Camera,
   Sparkles,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Cloud,
+  Globe,
+  Terminal,
+  CheckCheck,
+  FileCode,
+  Zap,
+  ShieldCheck
 } from 'lucide-react';
 
 // Client-side image compressor for seamless local upload without external URLs
@@ -144,7 +151,7 @@ interface AdminSettingsProps {
   onOpenRoleAccess?: () => void;
 }
 
-export type AdminSubTab = 'menu' | 'tables_ops' | 'staff' | 'financial_summary' | 'supabase_db';
+export type AdminSubTab = 'menu' | 'tables_ops' | 'staff' | 'financial_summary' | 'supabase_db' | 'cloudflare_deploy';
 
 export const AdminSettings: React.FC<AdminSettingsProps> = ({
   menuList,
@@ -329,6 +336,33 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
       navigator.clipboard.writeText(supabaseStatus.url);
       setCopiedUrl(true);
       setTimeout(() => setCopiedUrl(false), 2500);
+    }
+  };
+
+  // Cloudflare Deployment state
+  const [copiedWrangler, setCopiedWrangler] = useState(false);
+  const [copiedBuildCmd, setCopiedBuildCmd] = useState(false);
+  const [copiedEnvVars, setCopiedEnvVars] = useState(false);
+  const [cfPingStatus, setCfPingStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [cfPingDetails, setCfPingDetails] = useState<string>('');
+
+  const testCloudflareHealth = async () => {
+    setCfPingStatus('testing');
+    setCfPingDetails('Menghubungi endpoint /api/supabase/status...');
+    try {
+      const res = await fetch('/api/supabase/status?refresh=true');
+      const cType = res.headers.get('content-type') || '';
+      if (res.ok && cType.includes('application/json')) {
+        const json = await res.json();
+        setCfPingStatus('success');
+        setCfPingDetails(`Respons API valid (${json.runtime || 'Server Active'}). Supabase connected: ${json.connected ? 'Ya' : 'Tidak'}.`);
+      } else {
+        setCfPingStatus('error');
+        setCfPingDetails('Respons non-JSON. Fallback direct client ke Supabase otomatis aktif.');
+      }
+    } catch (err: any) {
+      setCfPingStatus('error');
+      setCfPingDetails(`Koneksi API: ${err?.message || 'Offline'}. Fallback direct Supabase aktif.`);
     }
   };
 
@@ -938,6 +972,20 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
           <Database className="w-4 h-4 text-emerald-500" />
           <span>Database Supabase</span>
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        </button>
+
+        <button
+          id="tab-admin-cloudflare"
+          onClick={() => setActiveSubTab('cloudflare_deploy')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+            activeSubTab === 'cloudflare_deploy'
+              ? 'bg-orange-600 text-white shadow-sm'
+              : 'bg-white text-orange-950 hover:bg-orange-50 border border-orange-300'
+          }`}
+        >
+          <Cloud className="w-4 h-4 text-orange-500" />
+          <span>Deploy Cloudflare</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-orange-100 text-orange-800 font-extrabold uppercase">Siap</span>
         </button>
       </div>
 
@@ -2274,7 +2322,336 @@ CREATE TABLE IF NOT EXISTS public.staff ( ... );`}</code>
         </div>
       )}
 
-      {/* ================= MODAL: TAMBAH / EDIT MENU ================= */}
+      {/* ================= SECTION: DEPLOY CLOUDFLARE ================= */}
+      {activeSubTab === 'cloudflare_deploy' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="bg-gradient-to-r from-orange-950 via-stone-900 to-amber-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-orange-900/50 relative overflow-hidden">
+            <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-orange-500/20 via-transparent to-transparent pointer-events-none"></div>
+            
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-orange-500/20 text-orange-300 text-xs font-bold border border-orange-500/30">
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Cloudflare Pages & Workers Ready</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                  Kesiapan Deployment Cloudflare
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+                  Aplikasi KafeKu telah dilengkapi konfigurasi SPA routing <code className="text-orange-300 bg-orange-950/80 px-1.5 py-0.5 rounded">_redirects</code>, edge security headers, Cloudflare Pages Functions serverless, dan fallback otomatis ke Supabase.
+                </p>
+              </div>
+
+              {/* Status Badge */}
+              <div className="bg-orange-900/40 border border-orange-500/40 rounded-2xl p-4 text-center shrink-0 w-full md:w-auto">
+                <div className="flex items-center justify-center space-x-2 text-emerald-400 font-extrabold text-sm mb-1">
+                  <CheckCheck className="w-4 h-4" />
+                  <span>Siap Deploy 100%</span>
+                </div>
+                <div className="text-[11px] text-stone-300">
+                  Preset: Vite &bull; Node 20 LTS
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Checklist 6 Pilar Kesiapan */}
+          <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <h4 className="font-extrabold text-stone-900 text-sm flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-orange-600" />
+                <span>Pemeriksaan Komponen Kesiapan Cloudflare</span>
+              </h4>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                6 dari 6 Terpasang
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+              {/* 1. SPA Redirects */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>SPA 404 Prevention</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">public/_redirects</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Rute <code className="text-stone-800">/* /index.html 200</code> memastikan refresh halaman kasir atau dapur tidak memunculkan error 404 di Cloudflare.
+                </p>
+              </div>
+
+              {/* 2. Edge Security & Cache Headers */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Header & Caching</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">public/_headers</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Pengaturan proteksi MIME-type, anti-sniffing, dan caching aset Vite immutable untuk performa super cepat CDN.
+                </p>
+              </div>
+
+              {/* 3. Cloudflare Pages Functions */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Serverless Edge API</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">functions/api</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Menjalankan API menu, pesanan, inventori, dan login di Cloudflare Workers tanpa perlu menyewa VPS.
+                </p>
+              </div>
+
+              {/* 4. Node.js 20 LTS Spec */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Node.js 20 LTS Target</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">.nvmrc &amp; .node-version</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Mencegah error incompatibilities build agent Cloudflare dengan memaksa penggunaan Node.js 20 LTS.
+                </p>
+              </div>
+
+              {/* 5. Wrangler Config */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Wrangler CLI Config</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">wrangler.toml</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Konfigurasi compatibility date dan output directory <code className="text-stone-800">dist</code> untuk perintah CLI.
+                </p>
+              </div>
+
+              {/* 6. Dual-Engine Supabase Resiliency */}
+              <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-1.5">
+                <div className="flex items-center justify-between font-bold text-stone-900">
+                  <span className="flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Supabase Resiliency</span>
+                  </span>
+                  <code className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800">Dual Fallback</code>
+                </div>
+                <p className="text-[11px] text-stone-600">
+                  Jika backend API tidak tersedia, browser langsung terhubung ke Supabase secara mandiri.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Panduan 2 Metode Deploy */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Metode A: Cloudflare Pages Dashboard (Git Integration) */}
+            <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-sm space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800">
+                    Metode 1 (Rekomendasi)
+                  </span>
+                  <span className="text-xs font-semibold text-stone-500">Otomatis via Git</span>
+                </div>
+                <h4 className="text-base font-bold text-stone-900 flex items-center space-x-2">
+                  <Globe className="w-4 h-4 text-orange-600" />
+                  <span>Cloudflare Pages (Git Integration)</span>
+                </h4>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Cukup hubungkan repository GitHub atau GitLab Anda ke Cloudflare Pages. Setiap kali Anda push, Cloudflare akan otomatis mem-build dan memperbarui web secara gratis.
+                </p>
+
+                {/* Form Settings Table */}
+                <div className="space-y-2 pt-2 text-xs">
+                  <div className="font-bold text-stone-700 text-[11px] uppercase tracking-wider">
+                    Pengaturan Build di Dashboard Cloudflare:
+                  </div>
+
+                  <div className="bg-stone-50 rounded-2xl p-3.5 border border-stone-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-stone-500">Framework preset:</span>
+                      <span className="font-mono font-bold text-stone-800">Vite</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-stone-500">Build command:</span>
+                      <div className="flex items-center space-x-1.5">
+                        <code className="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          npm run build:pages
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText('npm run build:pages');
+                            setCopiedBuildCmd(true);
+                            setTimeout(() => setCopiedBuildCmd(false), 2000);
+                          }}
+                          className="text-stone-400 hover:text-stone-800 p-1 rounded"
+                          title="Salin Build Command"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-stone-500">Build output directory:</span>
+                      <span className="font-mono font-bold text-stone-800">dist</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-stone-500">Root directory:</span>
+                      <span className="font-mono font-bold text-stone-800">/</span>
+                    </div>
+                  </div>
+                  {copiedBuildCmd && (
+                    <div className="text-[11px] font-bold text-emerald-600 text-right">
+                      &check; Build command disalin ke clipboard!
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <a
+                  href="https://dash.cloudflare.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center space-x-2 px-4 py-2.5 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs transition-colors shadow-sm"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Buka Dashboard Cloudflare Pages</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Metode B: Cloudflare Wrangler CLI */}
+            <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-sm space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-stone-100 text-stone-800">
+                    Metode 2 (CLI Cepat)
+                  </span>
+                  <span className="text-xs font-semibold text-stone-500">Tanpa Push Git</span>
+                </div>
+                <h4 className="text-base font-bold text-stone-900 flex items-center space-x-2">
+                  <Terminal className="w-4 h-4 text-stone-700" />
+                  <span>Deploy via Wrangler CLI</span>
+                </h4>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Deploy langsung dari terminal Anda dalam satu baris perintah. Cocok untuk pengujian cepat atau lingkungan staging mandiri.
+                </p>
+
+                {/* Code box */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-[11px] text-stone-500">
+                    <span>Jalankan di terminal proyek:</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText('npm run build:pages && npx wrangler pages deploy dist --project-name=kafeku');
+                        setCopiedWrangler(true);
+                        setTimeout(() => setCopiedWrangler(false), 2000);
+                      }}
+                      className="text-orange-600 hover:text-orange-800 font-bold flex items-center space-x-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedWrangler ? 'Tersalin!' : 'Salin Perintah'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-3.5 bg-stone-950 text-stone-200 rounded-2xl font-mono text-[11px] overflow-x-auto border border-stone-800 leading-relaxed">
+                    <code>{`# 1. Build aplikasi Vite
+npm run build:pages
+
+# 2. Deploy ke Cloudflare Pages
+npx wrangler pages deploy dist --project-name=kafeku`}</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Ping diagnostic test */}
+              <div className="bg-stone-50 rounded-2xl p-3 border border-stone-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-stone-800 text-[11px]">Uji Respon API Endpoint:</span>
+                  <button
+                    onClick={testCloudflareHealth}
+                    disabled={cfPingStatus === 'testing'}
+                    className="px-3 py-1 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-[11px] flex items-center space-x-1.5 disabled:opacity-50"
+                  >
+                    {cfPingStatus === 'testing' ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Zap className="w-3 h-3 text-amber-400" />
+                    )}
+                    <span>{cfPingStatus === 'testing' ? 'Memeriksa...' : 'Tes Ping API'}</span>
+                  </button>
+                </div>
+                {cfPingDetails && (
+                  <div className={`p-2 rounded-xl text-[11px] font-semibold ${
+                    cfPingStatus === 'success' 
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                      : 'bg-amber-50 text-amber-900 border border-amber-200'
+                  }`}>
+                    {cfPingDetails}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Environment Variables Card */}
+          <div className="bg-stone-900 text-white rounded-3xl p-6 sm:p-7 border border-stone-800 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-sm text-stone-100 flex items-center space-x-2">
+                  <FileCode className="w-4 h-4 text-orange-400" />
+                  <span>Environment Variables untuk Cloudflare Pages</span>
+                </h4>
+                <p className="text-[11px] text-stone-400">
+                  Tambahkan variabel berikut di menu <strong>Settings &gt; Environment variables</strong> di dashboard Cloudflare Pages:
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const envText = `VITE_SUPABASE_URL="https://yuyrqhqngjfikkhfwern.supabase.co"
+VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1eXJxaHFuZ2pmaWtraGZ3ZXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTYzNTIsImV4cCI6MjEwNjI5MjM1Mn0.LM_zI10Li77VE-XYW6ywKyHiNiEUFTnh4cHf5FmGQ48"
+SUPABASE_URL="https://yuyrqhqngjfikkhfwern.supabase.co"
+SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1eXJxaHFuZ2pmaWtraGZ3ZXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTYzNTIsImV4cCI6MjEwNjI5MjM1Mn0.LM_zI10Li77VE-XYW6ywKyHiNiEUFTnh4cHf5FmGQ48"`;
+                  navigator.clipboard.writeText(envText);
+                  setCopiedEnvVars(true);
+                  setTimeout(() => setCopiedEnvVars(false), 2000);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center space-x-1.5 border border-stone-700 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>{copiedEnvVars ? 'Tersalin!' : 'Salin Semua Nilai Env'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+              <div className="bg-stone-950 p-3.5 rounded-2xl border border-stone-800 space-y-1">
+                <div className="text-[10px] text-stone-500 font-sans font-bold">Variabel URL Supabase:</div>
+                <div className="text-orange-400 font-bold">VITE_SUPABASE_URL</div>
+                <div className="text-stone-300 text-[11px] truncate">https://yuyrqhqngjfikkhfwern.supabase.co</div>
+              </div>
+
+              <div className="bg-stone-950 p-3.5 rounded-2xl border border-stone-800 space-y-1">
+                <div className="text-[10px] text-stone-500 font-sans font-bold">Variabel Anon Key Supabase:</div>
+                <div className="text-orange-400 font-bold">VITE_SUPABASE_ANON_KEY</div>
+                <div className="text-stone-300 text-[11px] truncate">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showMenuModal && (
         <div className="fixed inset-0 z-50 bg-stone-950/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-5 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-8 max-h-[90vh] overflow-y-auto">

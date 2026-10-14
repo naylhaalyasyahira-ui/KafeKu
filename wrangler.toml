@@ -1,0 +1,8 @@
+name = "kafeku"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[vars]
+# Optional default environment variables (or configure in Cloudflare Pages dashboard)
+# VITE_SUPABASE_URL = "https://yuyrqhqngjfikkhfwern.supabase.co"
